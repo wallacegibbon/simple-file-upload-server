@@ -2,7 +2,7 @@ var http = require('http')
 var fs = require('fs')
 var Busboy = require('busboy')
 
-var PORT = 8000
+var PORT = process.argv[2] || 8000
 var targetDir = '/tmp/'
 
 var receivedFiles = []
@@ -32,7 +32,6 @@ function indexPage() {
 `
 }
 
-
 function currentTime() {
   return `${new Date().toTimeString()} -`
 }
@@ -57,8 +56,9 @@ function checkMultipart(contentType) {
 
 function fileHandler(fieldName, file, filename, encoding, mimitype) {
   var outStream = fs.createWriteStream(`${targetDir}/${filename}`)
-  outStream.on('error', e => log('ERROR:', e.message))
+  outStream.on('error', e => log(e.message))
   file.pipe(outStream)
+
   receivedFiles.push(filename)
   log(`receiving ${filename}...`)
 }
@@ -76,10 +76,9 @@ http.createServer((req, res) => {
   busboy.on('file', fileHandler)
   req.pipe(busboy)
 
-}).listen(8000, e => {
-  if (!e)
-    log(`listening on port ${PORT}...`)
-  else
-    log('ERROR:', e)
-})
+}).listen(PORT)
+
+
+log(`listening on port ${PORT}...`)
+
 
