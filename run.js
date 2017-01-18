@@ -33,14 +33,18 @@ function indexPage() {
 }
 
 function currentTime() {
-  return `${new Date().toTimeString()} -`
+  return `${new Date().toISOString()}>`
+}
+
+function green(str) {
+  return '\033[32m' + str + '\033[0m'
 }
 
 function log() {
-  console.log.bind(null, currentTime()).apply(console, arguments)
+  console.log.bind(0, green(currentTime())).apply(console, arguments)
 }
 
-function respIndex(res) {
+function responseIndex(res) {
   res.writeHead(200, { 'Content-Type': 'text/html' })
   res.end(indexPage())
 }
@@ -48,10 +52,6 @@ function respIndex(res) {
 function redirectToIndex(res) {
   res.writeHead(302, { 'Location': '/' })
   res.end()
-}
-
-function checkMultipart(contentType) {
-  return /multipart\/form-data/i.test(contentType)
 }
 
 function fileHandler(fieldName, file, filename, encoding, mimitype) {
@@ -63,22 +63,25 @@ function fileHandler(fieldName, file, filename, encoding, mimitype) {
   log(`receiving ${filename}...`)
 }
 
-http.createServer((req, res) => {
-  if (req.method !== 'POST')
-    return respIndex(res)
+function isMultipart(req) {
+  return /multipart\/form-data/i.test(req.headers['content-type'])
+}
 
-  if (!checkMultipart(req.headers['content-type']))
+function handler(req, res) {
+  if (req.method !== 'POST')
+    return responseIndex(res)
+
+  if (!isMultipart(req))
     return redirectToIndex(res)
 
-  var busboy = new Busboy({ headers: req.headers })
+  var bb = new Busboy({ headers: req.headers })
 
-  busboy.on('finish', () => redirectToIndex(res))
-  busboy.on('file', fileHandler)
-  req.pipe(busboy)
+  bb.on('finish', () => redirectToIndex(res))
+  bb.on('file', fileHandler)
+  req.pipe(bb)
+}
 
-}).listen(PORT)
-
+http.createServer(handler).listen(PORT)
 
 log(`listening on port ${PORT}...`)
-
 
