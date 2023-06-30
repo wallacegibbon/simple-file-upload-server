@@ -4,13 +4,18 @@ import config from "./config.js";
 import busboy from "busboy";
 
 function index_page(filename_lists) {
+	var simple_style = `
+	body { max-width: 600px; margin: 20px auto; padding: 10px; }
+	ul { padding: 0; }
+	li { list-style: none; word-wrap: break-word; }
+	li::before { content: ">"; color: steelblue; margin-right: 2px; }
+	#form { display: flex; }
+	#form>input:first-child { flex: 1; }
+	`;
+
 	var filenames = filename_lists
 		.map(function (f) { return `<li>${f}</li>`; })
 		.join("\n");
-
-	var simple_style = `
-	body { max-width: 700px; margin: 20px auto; }
-	`;
 
 	return `
 <!doctype html>
@@ -22,14 +27,10 @@ function index_page(filename_lists) {
 </head>
 
 <body>
-	<h2>Select File To Upload</h2>
-	<hr/>
-	<form action="/" method="POST" enctype="multipart/form-data">
+	<form id="form" action="/" method="POST" enctype="multipart/form-data">
 		<input type="file" name="fileupload">
 		<input type="submit" value="transmit">
 	</form>
-	<h2>Transfered Files</h2>
-	<hr/>
 	<ul>${filenames}</ul>
 </body>
 </html>
@@ -95,5 +96,5 @@ function handler(req, res) {
 
 http.createServer(handler).listen(config.port);
 
-console.log(`listening on port ${config.port}...`);
+console.log(`listening on http://127.0.0.1:${config.port} ...`);
 
