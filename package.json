@@ -1,5 +1,9 @@
 {
+	"type": "module",
+	"scripts": {
+		"start": "node run.js"
+	},
 	"dependencies": {
-		"busboy": "^0.2.13"
+		"busboy": "^1.6.0"
 	}
 }

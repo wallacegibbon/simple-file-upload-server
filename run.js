@@ -1,23 +1,26 @@
-const http = require('http')
-const fs = require('fs')
-const Busboy = require('busboy')
-const config = require("./config")
+import http from "node:http";
+import fs from "node:fs";
+import config from "./config.js";
+import busboy from "busboy";
 
+function index_page(filename_lists) {
+	var filenames = filename_lists
+		.map(function (f) { return `<li>${f}</li>`; })
+		.join("\n");
 
-function indexPage(files) {
+	var simple_style = `
+	body { max-width: 700px; margin: 20px auto; }
+	`;
+
 	return `
 <!doctype html>
 <html>
 <head>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<meta charset="utf-8">
-	<style>
-	body {
-		width: 700px;
-		margin: 20px auto;
-	}
-	</style>
+	<style>${simple_style}</style>
 </head>
+
 <body>
 	<h2>Select File To Upload</h2>
 	<hr/>
@@ -27,86 +30,70 @@ function indexPage(files) {
 	</form>
 	<h2>Transfered Files</h2>
 	<hr/>
-	<ul>
-		${ files.map(f => `<li>${f}</li>`).join('\n') }
-	</ul>
+	<ul>${filenames}</ul>
 </body>
 </html>
-  `
+  `;
 }
 
-function prefix() {
-	return `\x1b[33m${new Date().toISOString()}>\x1b[0m`
+function response_index(res) {
+	res.writeHead(200, { "Content-Type": "text/html" });
+	fs.readdir(config.path, function (err, files) {
+		if (!err) res.end(index_page(files));
+		else res.end("");
+	});
 }
 
-function log() {
-	console.log.bind(0, prefix()).apply(console, arguments)
+function redirect_to_index(res) {
+	res.writeHead(302, { "Location": "/" });
+	res.end();
 }
 
-function responseIndex(res) {
-	res.writeHead(200, { 'Content-Type': 'text/html' })
-	fs.readdir(config.path, (err, files) => {
-		err ? res.end("") : res.end(indexPage(files))
-	})
+function file_handler(field_name, file, { filename, encode }) {
+	var out_stream = fs.createWriteStream(`${config.path}/${filename}`);
+	out_stream.on("error", console.error);
+	file.pipe(out_stream);
+	console.log(`\treceiving ${filename}...`);
 }
 
-function redirectToIndex(res) {
-	res.writeHead(302, { 'Location': '/' })
-	res.end()
+function is_multipart(req) {
+	return /multipart\/form-data/i.test(req.headers["content-type"]);
 }
 
-function fileHandler(fieldName, file, filename, encoding, mimitype) {
-	const outStream = fs.createWriteStream(`${config.path}/${filename}`)
-	outStream.on('error', e => log(e.message))
-	file.pipe(outStream)
-
-	log(`Receiving ${filename}...`)
+function base64_decode(encoded_string) {
+	return Buffer.from(encoded_string, "base64").toString();
 }
 
-function isMultipart(req) {
-	return /multipart\/form-data/i.test(req.headers['content-type'])
-}
-
-function decodeBase64(string) {
-	return new Buffer(string, 'base64').toString()
-}
-
-function authFail(res) {
+function auth_fail(res) {
 	res.writeHead(401, {
-		'WWW-Authenticate': 'Basic realm="enter the password"'
-	})
-	res.end("")
+		"www-authenticate": "Basic realm=\"enter the password\"",
+	});
+	res.end("");
 }
 
 function handler(req, res) {
-	if (!req.headers.authorization) {
-		return authFail(res)
-	}
+	if (!req.headers.authorization)
+		return auth_fail(res);
 
-	const auth = (req.headers.authorization || '').split(' ')[1] || ''
-	const [ username, password ] = decodeBase64(auth).split(':')
+	var auth = (req.headers.authorization || "").split(" ")[1] || "";
+	var [ username, password ] = base64_decode(auth).split(":");
 
-	if (username != config.username || password != config.password) {
-		return authFail(res)
-	}
+	if (username != config.username || password != config.password)
+		return auth_fail(res);
 
-	if (req.method !== 'POST') {
-		return responseIndex(res)
-	}
+	if (req.method !== "POST")
+		return response_index(res);
+	if (!is_multipart(req))
+		return redirect_to_index(res);
 
-	if (!isMultipart(req)) {
-		return redirectToIndex(res)
-	}
+	var bb = busboy({ headers: req.headers });
 
-	const bb = new Busboy({
-		headers: req.headers
-	})
-
-	bb.on('finish', () => redirectToIndex(res))
-	bb.on('file', fileHandler)
-	req.pipe(bb)
+	bb.on("finish", function () { redirect_to_index(res); });
+	bb.on("file", file_handler);
+	req.pipe(bb);
 }
 
-http.createServer(handler).listen(config.port, () => {
-	log(`Listening on port ${config.port}...`)
-})
+http.createServer(handler).listen(config.port);
+
+console.log(`listening on port ${config.port}...`);
+
