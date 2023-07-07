@@ -1,29 +1,24 @@
+import config from "./config.js";
 import http from "node:http";
 import fs from "node:fs";
-import config from "./config.js";
+import path from "node:path";
 import busboy from "busboy";
 
 function index_page(filename_lists) {
-	var simple_style = `
-	body { max-width: 600px; margin: 20px auto; padding: 10px; }
-	ul { padding: 0; }
-	li { list-style: none; word-wrap: break-word; }
-	li::before { content: ">"; color: steelblue; margin-right: 2px; }
-	#form { display: flex; }
-	#form>input:first-child { flex: 1; }
-	`;
-
-	var filenames = filename_lists
-		.map(function (f) { return `<li>${f}</li>`; })
-		.join("\n");
-
 	return `
 <!doctype html>
 <html>
 <head>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<meta charset="utf-8">
-	<style>${simple_style}</style>
+	<style>
+body { max-width: 600px; margin: 20px auto; padding: 10px; }
+ul { padding: 0; }
+li { list-style: none; word-wrap: break-word; }
+li::before { content: ">"; color: steelblue; margin-right: 2px; }
+#form { display: flex; }
+#form>input:first-child { flex: 1; }
+	</style>
 </head>
 
 <body>
@@ -31,15 +26,21 @@ function index_page(filename_lists) {
 		<input type="file" name="fileupload">
 		<input type="submit" value="transmit">
 	</form>
-	<ul>${filenames}</ul>
+	<ul>
+	${filename_lists.map(function (f) { return `<li>${f}</li>`; }).join("\n")}
+	</ul>
 </body>
 </html>
   `;
 }
 
+function target_path() {
+	return path.resolve(process.argv.length >= 3 ? process.argv[2] : config.default_path);
+}
+
 function response_index(res) {
 	res.writeHead(200, { "Content-Type": "text/html" });
-	fs.readdir(config.path, function (err, files) {
+	fs.readdir(target_path(), function (err, files) {
 		if (!err) res.end(index_page(files));
 		else res.end("");
 	});
@@ -51,7 +52,7 @@ function redirect_to_index(res) {
 }
 
 function file_handler(field_name, file, { filename, encode }) {
-	var out_stream = fs.createWriteStream(`${config.path}/${filename}`);
+	var out_stream = fs.createWriteStream(`${target_path()}/${filename}`);
 	out_stream.on("error", console.error);
 	file.pipe(out_stream);
 	console.log(`\treceiving ${filename}...`);
@@ -66,26 +67,27 @@ function base64_decode(encoded_string) {
 }
 
 function auth_fail(res) {
-	res.writeHead(401, {
-		"www-authenticate": "Basic realm=\"enter the password\"",
-	});
+	res.writeHead(401, { "www-authenticate": "Basic realm=\"enter the password\"" });
 	res.end("");
 }
 
-function handler(req, res) {
-	if (!req.headers.authorization)
-		return auth_fail(res);
+function get_user_from_request(req) {
+	if (!req.headers.authorization) return null;
 
 	var auth = (req.headers.authorization || "").split(" ")[1] || "";
 	var [ username, password ] = base64_decode(auth).split(":");
 
-	if (username != config.username || password != config.password)
-		return auth_fail(res);
+	return { username, password };
+}
 
-	if (req.method !== "POST")
-		return response_index(res);
-	if (!is_multipart(req))
-		return redirect_to_index(res);
+function handler(req, res) {
+	var user = get_user_from_request(req);
+	if (!user) return auth_fail(res);
+	if (user.username != config.username) return auth_fail(res);
+	if (user.password != config.password) return auth_fail(res);
+
+	if (req.method !== "POST") return response_index(res);
+	if (!is_multipart(req)) return redirect_to_index(res);
 
 	var bb = busboy({ headers: req.headers });
 
@@ -94,7 +96,8 @@ function handler(req, res) {
 	req.pipe(bb);
 }
 
-http.createServer(handler).listen(config.port);
+console.log(`\tWorking on target directory: ${target_path()}`);
+console.log(`\tListening on http://127.0.0.1:${config.port} ...`);
 
-console.log(`listening on http://127.0.0.1:${config.port} ...`);
+http.createServer(handler).listen(config.port);
 

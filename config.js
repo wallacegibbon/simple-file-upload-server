@@ -1,7 +1,7 @@
 export default {
-	username: "admin",
-	password: "666",
-	path: "/tmp",
+	username: "wallace",
+	password: "blahblah",
+	default_path: "/tmp",
 	port: 8080,
 };
 
