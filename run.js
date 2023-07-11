@@ -1,8 +1,26 @@
 import config from "./config.js";
 import http from "node:http";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import busboy from "busboy";
+
+function target_path() {
+	return path.resolve(process.argv.length >= 3 ? process.argv[2] : config.default_path);
+}
+
+function ip_addresses() {
+	var entries = Object.entries(os.networkInterfaces());
+	function ip_filter({ family, internal }) {
+		return family === "IPv4" && !internal;
+	}
+	var IPs = entries.map(function ([_, address_list]) {
+		return address_list.filter(ip_filter);
+	});
+	return Array.prototype.concat(...IPs).map(function ({ address }) {
+		return address;
+	});
+}
 
 function index_page(filename_lists) {
 	return `
@@ -34,10 +52,6 @@ li::before { content: ">"; color: steelblue; margin-right: 2px; }
   `;
 }
 
-function target_path() {
-	return path.resolve(process.argv.length >= 3 ? process.argv[2] : config.default_path);
-}
-
 function response_index(res) {
 	res.writeHead(200, { "Content-Type": "text/html" });
 	fs.readdir(target_path(), function (err, files) {
@@ -51,7 +65,7 @@ function redirect_to_index(res) {
 	res.end();
 }
 
-function file_handler(field_name, file, { filename, encode }) {
+function file_handler(_field_name, file, { filename }) {
 	var out_stream = fs.createWriteStream(`${target_path()}/${filename}`);
 	out_stream.on("error", console.error);
 	file.pipe(out_stream);
@@ -97,7 +111,9 @@ function handler(req, res) {
 }
 
 console.log(`\tWorking on target directory: ${target_path()}`);
-console.log(`\tListening on http://127.0.0.1:${config.port} ...`);
+console.log(`\tListening on:`);
+for (var addr of ip_addresses())
+	console.log(`\t\thttp://${addr}:${config.port} ...`);
 
 http.createServer(handler).listen(config.port);
 
