@@ -1,20 +1,18 @@
-import config from "./config.js";
 import http from "node:http";
+import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
-import path from "node:path";
 import busboy from "busboy";
+import * as commander from "commander";
 
-function target_path() {
-	return path.resolve(process.argv.length >= 3 ? process.argv[2] : config.default_path);
-}
+/// the global variable that holds all configurations (like path, port, username, ...)
+var config = {};
 
 function ip_addresses() {
-	var entries = Object.entries(os.networkInterfaces());
 	function ip_filter({ family, internal }) {
 		return family === "IPv4" && !internal;
 	}
-	var IPs = entries.map(function ([_, address_list]) {
+	var IPs = Object.entries(os.networkInterfaces()).map(function ([_, address_list]) {
 		return address_list.filter(ip_filter);
 	});
 	return Array.prototype.concat(...IPs).map(function ({ address }) {
@@ -49,15 +47,17 @@ li::before { content: ">"; color: steelblue; margin-right: 2px; }
 	</ul>
 </body>
 </html>
-  `;
+	`;
 }
 
-function response_index(res) {
+async function response_index(res) {
 	res.writeHead(200, { "Content-Type": "text/html" });
-	fs.readdir(target_path(), function (err, files) {
-		if (!err) res.end(index_page(files));
-		else res.end("");
-	});
+	try {
+		var files = await fs.promises.readdir(config.path);
+		res.end(index_page(files));
+	} catch (err) {
+		res.end("");
+	}
 }
 
 function redirect_to_index(res) {
@@ -66,7 +66,7 @@ function redirect_to_index(res) {
 }
 
 function file_handler(_field_name, file, { filename }) {
-	var out_stream = fs.createWriteStream(`${target_path()}/${filename}`);
+	var out_stream = fs.createWriteStream(`${config.path}/${filename}`);
 	out_stream.on("error", console.error);
 	file.pipe(out_stream);
 	console.log(`\treceiving ${filename}...`);
@@ -110,10 +110,24 @@ function handler(req, res) {
 	req.pipe(bb);
 }
 
-console.log(`\tWorking on target directory: ${target_path()}`);
-console.log(`\tListening on:`);
-for (var addr of ip_addresses())
-	console.log(`\t\thttp://${addr}:${config.port} ...`);
+function show_startup_info() {
+	console.log(`\tWorking on target directory: ${path.resolve(config.path)}`);
+	console.log(`\tListening on:`);
+	for (var addr of ip_addresses())
+		console.log(`\t\thttp://${addr}:${config.port} ...`);
+}
 
-http.createServer(handler).listen(config.port);
+commander.program
+	.name("simple-file-upload-server")
+	.description("A simple HTTP server for uploading files")
+	.option("--port <number>", "The TCP port this server listens to", "8080")
+	.option("--path <path>", "The path this server serves", "/tmp")
+	.option("--username <string>", "The username", "wallace")
+	.option("--password <string>", "The password", "blahblah")
+	.action(function (args) {
+		config = args;
+		http.createServer(handler).listen(Number(config.port));
+		show_startup_info();
+	})
+	.parse();
 
