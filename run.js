@@ -6,12 +6,12 @@ import busboy from "busboy";
 import * as commander from "commander";
 
 /// the global variable that holds all configurations (like path, port, username, ...)
-var config = {};
+let config = {};
 
 let ip_addresses = () => {
   let ip_filter = ({ family, internal }) => family === "IPv4" && !internal;
 
-  var IPs = Object.entries(os.networkInterfaces())
+  let IPs = Object.entries(os.networkInterfaces())
     .map(([_, address_list]) => address_list.filter(ip_filter));
 
   return Array.prototype.concat(...IPs)
@@ -51,7 +51,7 @@ let index_page = filename_lists => `
 let response_index = async res => {
   res.writeHead(200, { "Content-Type": "text/html" });
   try {
-    var files = await fs.promises.readdir(config.path);
+    let files = await fs.promises.readdir(config.path);
     res.end(index_page(files));
   } catch (err) {
     res.end("");
@@ -64,7 +64,7 @@ let redirect_to_index = res => {
 };
 
 let file_handler = (_field_name, file, { filename }) => {
-  var out_stream = fs.createWriteStream(`${config.path}/${filename}`);
+  let out_stream = fs.createWriteStream(`${config.path}/${filename}`);
   out_stream.on("error", console.error);
   file.pipe(out_stream);
   console.log(`\treceiving ${filename}...`);
@@ -84,14 +84,14 @@ let auth_fail = res => {
 let get_user_from_request = (req) => {
   if (!req.headers.authorization) return null;
 
-  var auth = (req.headers.authorization || "").split(" ")[1] || "";
-  var [username, password] = base64_decode(auth).split(":");
+  let auth = (req.headers.authorization || "").split(" ")[1] || "";
+  let [username, password] = base64_decode(auth).split(":");
 
   return { username, password };
 };
 
 let handler = (req, res) => {
-  var user = get_user_from_request(req);
+  let user = get_user_from_request(req);
   if (!user) return auth_fail(res);
   if (user.username != config.username) return auth_fail(res);
   if (user.password != config.password) return auth_fail(res);
@@ -99,7 +99,7 @@ let handler = (req, res) => {
   if (req.method !== "POST") return response_index(res);
   if (!is_multipart(req)) return redirect_to_index(res);
 
-  var bb = busboy({ headers: req.headers });
+  let bb = busboy({ headers: req.headers });
 
   bb.on("finish", () => redirect_to_index(res));
   bb.on("file", file_handler);
@@ -109,7 +109,7 @@ let handler = (req, res) => {
 let show_startup_info = () => {
   console.log(`\tWorking on target directory: ${path.resolve(config.path)}`);
   console.log(`\tListening on:`);
-  for (var addr of ip_addresses())
+  for (let addr of ip_addresses())
     console.log(`\t\thttp://${addr}:${config.port} ...`);
 };
 
